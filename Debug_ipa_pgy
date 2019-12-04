@@ -1,0 +1,159 @@
+#!/bin/bash
+
+# 计时
+SECONDS=0
+# 获取工程根目录
+fadir()  
+{  
+    local this_dir=`pwd`  
+    local child_dir="$1" 
+    dirname "$child_dir" 
+    cd $this_dir  
+} 
+CUR_DIR=$(cd `dirname $0` && pwd -P )
+PROJ_BIN=`fadir $CUR_DIR`
+echo "当前文件路径 $CUR_DIR"
+echo "当前文件路径上一级 $PROJ_BIN"
+
+
+
+
+echo "
+
+🎉  🎉  🎉  🎉  🎉  🎉  开始打包! 🎉  🎉  🎉  🎉  🎉  🎉 
+
+"
+#工程绝对路径
+cd $PROJ_BIN
+project_path=$(pwd)
+echo "工程路径 $project_path"
+# 输出到桌面
+output_path=~/Desktop
+#获取工程默认scheme的名字（默认与工程文件名字相同）
+scheme_name=$(echo $(basename ./*.xcodeproj) | awk -F. '{print $1}')
+echo "输出scheme_name $scheme_name"
+
+App_Name=`find . -name *.xcodeproj | awk -F "[/.]" '{print $(NF-1)}'`
+echo "输出App_Name $App_Name"
+
+# info.plist文件路径
+InfoPlist_Path="${Project_Path}/${App_Name}/Info.plist"
+
+Workspace_Path="${project_path}/${App_Name}.xcworkspace"
+Xcodeproj_Path="${project_path}/${App_Name}.xcodeproj"
+# project.pbxproj文件路径
+Pbxproj_Path="${Xcodeproj_Path}/project.pbxproj"
+echo "输出Pbxproj_Path $Pbxproj_Path"
+
+# Pbxproj_Path指向 project.pbxproj 文件路径
+configuration=$(grep -i "MARKETING_VERSION =" ${Pbxproj_Path})
+
+Array=($(echo $configuration))
+# project.pbxproj 中存在多行PRODUCT_BUNDLE_IDENTIFIER信息，从后往前读取
+MARKETING_VERSION=${Array[5]}
+if [ ! -n $MARKETING_VERSION ]
+then
+    MARKETING_VERSION=${Array[3]}
+fi
+
+# Pbxproj_Path指向 project.pbxproj 文件路径
+configuration=$(grep -i "PRODUCT_BUNDLE_IDENTIFIER =" ${Pbxproj_Path})
+Array=($(echo $configuration))
+# echo "》》》》》》》》》》》》》》$configuration"
+# project.pbxproj 中存在多行PRODUCT_BUNDLE_IDENTIFIER信息，从后往前读取
+Bundle_Identifier=${Array[2]}
+if [ ! -n $Bundle_Identifier ]
+then
+    Bundle_Identifier=${Array[13]}
+fi
+echo "Bundle_Identifier = ${Bundle_Identifier}"
+
+# 获取时间 如:201706011145
+current_date="$(date +%Y%m%d_%H%M%S)"
+# 指定输出ipa路径
+export_path="${output_path}/${scheme_name}_${current_date}"
+export_path_ipa="${export_path}/${scheme_name}.ipa" 
+echo "输出路径 $export_path_ipa"
+
+
+fastlane gym --export_method ad-hoc --clean --configuration Debug --output_directory ${export_path} --export_xcargs -allowProvisioningUpdates
+
+if [ $? -eq 0 ]; then
+echo "打包总用时: ${SECONDS}s ~~~~~~~~~~~~~~~~"
+echo "
+
+	🎉  🎉  🎉  🎉  🎉  🎉  ${scheme_name} 打包完成! 🎉  🎉  🎉  🎉  🎉  🎉  
+
+"
+else
+    echo "🎉  🎉  🎉  🎉  🎉  🎉${scheme_name} 打包失败!🎉  🎉  🎉  🎉  🎉  🎉"
+    exit
+fi
+
+
+
+if [ "$export_path" != "" ];then
+echo "
+
+🎉  🎉  🎉  🎉  🎉  🎉  开始上传! 🎉  🎉  🎉  🎉  🎉  🎉
+
+"
+else
+    echo "🎉  🎉  🎉  🎉  🎉  🎉输出路径异常!🎉  🎉  🎉  🎉  🎉  🎉"
+    exit
+fi
+
+
+curl -F "file=@$export_path_ipa" \
+-F "_api_key=fcxxxxxxxxxxxxxxxxxxxxxxxxxxdf" https://www.pgyer.com/apiv2/app/upload
+
+
+  # fir login 96f234022c34f9a96a0d3c60be33388d
+
+  # fir publish $export_path_ipa 
+
+
+if [ $? -eq 0 ]; then
+echo "共计总用时: ${SECONDS}s ~~~~~~~~~~~~~~~~"
+echo "
+
+🎉  🎉  🎉  🎉  🎉  🎉  上传完成! 🎉  🎉  🎉  🎉  🎉  🎉 
+
+"
+else
+    echo "🎉  🎉  🎉  🎉  🎉  🎉上传失败!🎉  🎉  🎉  🎉  🎉  🎉"
+    exit
+fi
+
+
+
+echo "
+
+🎉  🎉  🎉  🎉  🎉  🎉  准备发送消息! 🎉  🎉  🎉  🎉  🎉  🎉 
+
+"
+
+curl -o token.txt \
+-s https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=xxxxxxxxxxxxxxx\&corpsecret=xxxxxxxxxxxxxxxxxxx
+
+token=$(cat token.txt |jq -r '.access_token')
+echo "这里是一个文件的内容 $token"
+
+
+
+current_data="$(date +%Y-%m-%d_%H:%M:%S)"
+pgyerQR="https://i.loli.net/2019/09/12/xxxxxxxxxxxxxxxxxxxx.png"
+
+curl -H "Content-Type: application/json" \
+-X POST \
+-d '{"toparty":"54|3|38|41|45|47|48|51|53|55|56|57|58|18|60","msgtype":"news","agentid":1000003,"news":{"articles":[{"title":"iOSAPP","description" : "Debug测试包'$MARKETING_VERSION'版本已于'${current_data}'打包成功","url":"https://www.pgyer.com/ikang","picurl":"'${pgyerQR}'"}]}}' https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$token
+
+echo "
+
+🎉  🎉  🎉  🎉  🎉  🎉  发送消息完成! 🎉  🎉  🎉  🎉  🎉  🎉 
+
+"
+
+exit
+ 
+
